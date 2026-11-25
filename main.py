@@ -76,7 +76,27 @@ altheapath = os.path.join(
     os.environ.get("XDG_DATA_HOME") or f'{ os.environ["HOME"] }/.local/share',
     "althea",
 )
-export_anisette = "export ALTSERVER_ANISETTE_SERVER='http://127.0.0.1:6969'"
+export_anisette = "export ALTSERVER_ANISETTE_SERVER='https://mac-ani.jkcoxson.com'"
+
+def update_anisette_server():
+    global export_anisette
+    candidate_urls = [
+        "http://127.0.0.1:6969",
+        "https://mac-ani.jkcoxson.com",
+        "https://ani.846969.xyz",
+        "https://ani.jkcoxson.com",
+    ]
+    for url in candidate_urls:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "AltServer/1.0"})
+            with urllib.request.urlopen(req, timeout=3) as r:
+                if r.status == 200:
+                    export_anisette = f"export ALTSERVER_ANISETTE_SERVER='{url}'"
+                    return url
+        except Exception:
+            pass
+    export_anisette = "export ALTSERVER_ANISETTE_SERVER='https://ani.jkcoxson.com'"
+    return "https://ani.jkcoxson.com"
 
 # Check version
 with open(resource_path("resources/version"), "r", encoding="utf-8") as f:
@@ -445,49 +465,20 @@ class SplashScreen(Handy.Window):
 
     
     def startup_process(self):
-        self.lbl1.set_text("Checking if anisette-server is already running...")
-        self.loadalthea.set_fraction(0.1)
-        command = 'curl 127.0.0.1:6969 | grep -q "{"'
-        CheckRun = subprocess.run(command, shell=True)
-        if not os.path.isfile(f"{(altheapath)}/anisette-server"):
-            self.lbl1.set_text("Downloading anisette-server...")
-            self.download_bin("anisette-server", "https://github.com/vyvir/althea/releases/download/v0.5.0/anisette-server")
-            self.loadalthea.set_fraction(0.2)
-            self.lbl1.set_text("Downloading Apple Music APK...")
-            r = requests.get(
-                "https://apps.mzstatic.com/content/android-apple-music-apk/applemusic.apk",
-                allow_redirects=True,
-            )
-            open(f"{(altheapath)}/am.apk", "wb").write(r.content)
-            os.makedirs(f"{(altheapath)}/lib/x86_64")
-            self.loadalthea.set_fraction(0.3)
-            self.lbl1.set_text("Extracting necessary libraries...")
-            CheckRunB = subprocess.run(
-                f'unzip -j "{(altheapath)}/am.apk" "lib/x86_64/libstoreservicescore.so" -d "{(altheapath)}/lib/x86_64"',
-                shell=True,
-            )
-            CheckRunC = subprocess.run(
-                f'unzip -j "{(altheapath)}/am.apk" "lib/x86_64/libCoreADI.so" -d "{(altheapath)}/lib/x86_64"',
-                shell=True,
-            )
-            silent_remove(f"{(altheapath)}/am.apk")
-            self.loadalthea.set_fraction(0.4)
-        self.lbl1.set_text("Starting anisette-server...")
-        subprocess.run(f"{(altheapath)}/anisette-server -n 127.0.0.1 -p 6969 &", shell=True)
-        #subprocess.run(f"cd {(altheapath)} && ./anisette-server &", shell=True)#-n 127.0.0.1 -p 6969 &", shell=True
+        self.lbl1.set_text("Configuring Anisette server...")
+        self.loadalthea.set_fraction(0.2)
+        active_server = update_anisette_server()
+        if active_server == "http://127.0.0.1:6969":
+            self.lbl1.set_text("Using local anisette-server...")
+        else:
+            self.lbl1.set_text(f"Connected to remote Anisette ({active_server.split('//')[-1]})...")
         self.loadalthea.set_fraction(0.5)
-        finished = False
-        while not finished:
-            CheckRun5 = subprocess.run(command, shell=True)
-            if CheckRun5.returncode == 0:
-                finished = True
-            else:
-                sleep(1)
+
         if not os.path.isfile(f"{(altheapath)}/AltServer"):
-            self.download_bin("AltServer", "https://github.com/NyaMisty/AltServer-Linux/releases/download/v0.0.5/AltServer")
             self.lbl1.set_text("Downloading AltServer...")
-            self.loadalthea.set_fraction(0.6)
+            self.download_bin("AltServer", "https://github.com/NyaMisty/AltServer-Linux/releases/download/v0.0.5/AltServer")
         self.loadalthea.set_fraction(0.8)
+
         if not os.path.isfile(f"{(altheapath)}/AltStore.ipa"):
             self.lbl1.set_text("Downloading AltStore...")
             altstore_download("Download")
@@ -498,6 +489,7 @@ class SplashScreen(Handy.Window):
                 altstore_download("Download")
         self.lbl1.set_text("Starting AltServer...")
         self.loadalthea.set_fraction(1.0)
+        subprocess.run(f"killall {AltServer}", shell=True)
         subprocess.run(f"{export_anisette} ; {(altheapath)}/AltServer &", shell=True)
         return 0
 
